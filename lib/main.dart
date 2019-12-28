@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:blocapps/bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:blocapps/blocs/timer_bloc.dart';
+import 'package:blocapps/ticker.dart';
+import 'package:blocapps/blocs/timer_state.dart';
+
+import 'blocs/timer_event.dart';
 
 void main() => runApp(MyApp());
 
@@ -8,65 +12,120 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        primaryColor: Color.fromRGBO(109, 234, 255, 1),
+        accentColor: Color.fromRGBO(72, 74, 126, 1),
+        brightness: Brightness.dark,
       ),
-      home: BlocProvider<CounterBloc>(
-        create: (context) => CounterBloc(),
-        child: CounterPage(),
+      title: 'Flutter Timer',
+      home: BlocProvider(
+        create: (context) => TimerBloc(ticker: Ticker()),
+        child: Timer(),
       ),
     );
   }
 }
+class Timer extends StatelessWidget {
+  static const TextStyle timerTextStyle = TextStyle(
+    fontSize: 60,
+    fontWeight: FontWeight.bold,
+  );
 
-class CounterPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final CounterBloc counterBloc = BlocProvider.of<CounterBloc>(context);
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Counter'),
-      ),
-      body: BlocBuilder<CounterBloc, int>(
-        builder: (context, count){
-          return Center(
-            child: Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 24,
-              ),
-            ),
-          );
-        },
-      ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      appBar: AppBar(title: Text('Flutter Timer')),
+      body: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.all(10.0),
-            child: FloatingActionButton(
-              child: Icon(Icons.remove),
-              onPressed: (){
-                counterBloc.add(CounterEvent.decrement);
-              }
+            padding: EdgeInsets.symmetric(vertical: 100.0),
+            child: Center(
+              child: BlocBuilder<TimerBloc, TimerState>(
+                builder: (context, state) {
+                  final String minutesStr = ((state.duration / 60) % 60)
+                      .floor()
+                      .toString()
+                      .padLeft(2, '0');
+                  final String secondsStr =
+                  (state.duration % 60).floor().toString().padLeft(2, '0');
+                  return Text(
+                    '$minutesStr:$secondsStr',
+                    style: Timer.timerTextStyle,
+                  );
+                },
+              ),
             ),
           ),
-          SizedBox(height: 5.0),
-          Padding(
-            padding: const EdgeInsets.all(10.0),
-            child: FloatingActionButton(
-                child: Icon(Icons.add),
-                onPressed: (){
-                  counterBloc.add(CounterEvent.increment);
-                }
-            ),
+          BlocBuilder<TimerBloc, TimerState>(
+            condition: (previousState, state) =>
+            state.runtimeType != previousState.runtimeType,
+            builder: (context, state) => Actions(),
           ),
         ],
-      )
+      ),
     );
   }
 }
+class Actions extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: _mapStateToActionButtons(
+        timerBloc: BlocProvider.of<TimerBloc>(context),
+      ),
+    );
+  }
+
+  List<Widget> _mapStateToActionButtons({
+    TimerBloc timerBloc,
+  }) {
+    final TimerState currentState = timerBloc.state;
+    if (currentState is Ready) {
+      return [
+        FloatingActionButton(
+          child: Icon(Icons.play_arrow),
+          onPressed: () =>
+              timerBloc.add(Start(duration: currentState.duration)),
+        ),
+      ];
+    }
+    if (currentState is Running) {
+      return [
+        FloatingActionButton(
+          child: Icon(Icons.pause),
+          onPressed: () => timerBloc.add(Pause()),
+        ),
+        FloatingActionButton(
+          child: Icon(Icons.replay),
+          onPressed: () => timerBloc.add(Reset()),
+        ),
+      ];
+    }
+    if (currentState is Paused) {
+      return [
+        FloatingActionButton(
+          child: Icon(Icons.play_arrow),
+          onPressed: () => timerBloc.add(Resume()),
+        ),
+        FloatingActionButton(
+          child: Icon(Icons.replay),
+          onPressed: () => timerBloc.add(Reset()),
+        ),
+      ];
+    }
+    if (currentState is Finished) {
+      return [
+        FloatingActionButton(
+          child: Icon(Icons.replay),
+          onPressed: () => timerBloc.add(Reset()),
+        ),
+      ];
+    }
+    return [];
+  }
+}
+
 
