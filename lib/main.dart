@@ -1,72 +1,145 @@
+import 'package:blocapps/bloc/models/unreal.dart';
 import 'package:flutter/material.dart';
-import 'package:blocapps/bloc.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:bloc/bloc.dart';
 
-void main() => runApp(MyApp());
+import 'package:blocapps/bloc/loc.dart';
 
-class MyApp extends StatelessWidget {
+void main() {
+  BlocSupervisor.delegate = SimpleBlocDelegate();
+  runApp(App());
+}
+
+class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: BlocProvider<CounterBloc>(
-        create: (context) => CounterBloc(),
-        child: CounterPage(),
+      title: 'Flutter Infinite Scroll',
+      home: Scaffold(
+        appBar: AppBar(
+          title: Text('Posts'),
+        ),
+        body: BlocProvider(
+          create: (context) =>
+          PostBloc(httpClient: http.Client())..add(Fetch()),
+          child: HomePage(),
+        ),
       ),
     );
   }
 }
+class HomePage extends StatefulWidget {
+  @override
+  _HomePageState createState() => _HomePageState();
+}
 
-class CounterPage extends StatelessWidget {
+class _HomePageState extends State<HomePage> {
+  final _scrollController = ScrollController();
+  final _scrollThreshold = 200.0;
+  PostBloc _postBloc;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    _postBloc = BlocProvider.of<PostBloc>(context);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final CounterBloc counterBloc = BlocProvider.of<CounterBloc>(context);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Counter'),
-      ),
-      body: BlocBuilder<CounterBloc, int>(
-        builder: (context, count){
+    return BlocBuilder<PostBloc, PostState>(
+      // ignore: missing_return
+      builder: (context, state) {
+        if (state is PostUninitialized) {
           return Center(
-            child: Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 24,
-              ),
-            ),
+            child: CircularProgressIndicator(),
           );
-        },
+        }
+        if (state is PostError) {
+          return Center(
+            child: Text('failed to fetch posts'),
+          );
+        }
+        if (state is PostLoaded) {
+          if (state.posts.isEmpty) {
+            return Center(
+              child: Text('no posts'),
+            );
+          }
+          return ListView.builder(
+            itemBuilder: (BuildContext context, int index) {
+              return index >= state.posts.length
+                  ? BottomLoader()
+                  : PostWidget(post: state.posts[index]);
+            },
+            itemCount: state.hasReachedMax
+                ? state.posts.length
+                : state.posts.length + 1,
+            controller: _scrollController,
+          );
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    if (maxScroll - currentScroll <= _scrollThreshold) {
+      _postBloc.add(Fetch());
+    }
+  }
+}
+class BottomLoader extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: Alignment.center,
+      child: Center(
+        child: SizedBox(
+          width: 33,
+          height: 33,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+          ),
+        ),
       ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.all(10.0),
-            child: FloatingActionButton(
-              child: Icon(Icons.remove),
-              onPressed: (){
-                counterBloc.add(CounterEvent.decrement);
-              }
-            ),
-          ),
-          SizedBox(height: 5.0),
-          Padding(
-            padding: const EdgeInsets.all(10.0),
-            child: FloatingActionButton(
-                child: Icon(Icons.add),
-                onPressed: (){
-                  counterBloc.add(CounterEvent.increment);
-                }
-            ),
-          ),
-        ],
-      )
+    );
+  }
+}
+class PostWidget extends StatelessWidget {
+  final Unreal post;
+
+  const PostWidget({Key key, @required this.post}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ExpansionTile(
+      title: ListTile(
+        leading: Text(
+          '${post.id}',
+          style: TextStyle(fontSize: 30.0),
+        ),
+        title: Text(post.title,style: TextStyle(fontSize: 15.0),),
+        isThreeLine: true,
+        subtitle: Text(post.body,style: TextStyle(fontSize: 10.0),),
+        dense: true,
+      ),
     );
   }
 }
 
+class SimpleBlocDelegate extends BlocDelegate {
+  @override
+  void onTransition(Bloc bloc, Transition transition) {
+    super.onTransition(bloc, transition);
+    print(transition);
+  }
+}

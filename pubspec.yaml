@@ -28,7 +28,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_bloc: ^2.0.0
-  meta: ^1.1.6
+  equatable: ^0.6.0
+  http:
+  meta:
 
 
 # For information on the generic Dart part of this file, see the
